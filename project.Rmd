@@ -1,0 +1,113 @@
+---
+title: "Machine Learning Course Project Writeup"
+date: "September 23, 2015"
+output: html_document
+---
+
+#Summary
+The following document represents the write-up for the Practical Machine Learning Coursera course project.   The goal of the project is to evaluate the Weight Lifting Exercise Dataset, clean the data, develop a test a machine learning algorithm, and then use that algorithm to predict the manner in which they did the exercise on a separate dataset.  The "classe" variable is this outcome, so it can be used to to cross-reference the predictions for quality of the algorithm.
+
+After reviewing and testing the data, there was little difference between 3 models.  The 3 models tested were:
+
+- Stochastic Gradient Boosting (gbm)
+- Bagged CART (treebag)
+- Random Forest (rf)
+
+#Librarys
+```{r warning=FALSE,message=FALSE}
+library(caret)
+library(randomForest)
+library(klaR)
+library(ipred)
+library(gbm)
+```
+
+#Reading in the CSV files
+This code reads the test and train CSV files provided, applies the variable names, and sets the 3 different NA values.
+```{r warning=FALSE,message=FALSE}
+trainDataRaw <- read.csv('./pml-training.csv',header=TRUE,na.strings=c("NA","#DIV/0!",""))
+testDataRaw <- read.csv('./pml-testing.csv',header=TRUE,na.strings=c("NA","#DIV/0!",""))
+set.seed(45584)
+```
+
+#Cleaning the Data
+In order to properly analyze the data, the NAs should be cleaned.  It is this authors choice to remove any column that is not complete, or remove any column that contains NA values.  There are 160 observations so trimming is necessary.  There is further pruning based on the variable names, any observation that ends with x,y,or z in addition to the first 7 metadata columns are removed.  The only columns that are kept are printed below.
+
+```{r warning=FALSE,message=FALSE}
+trainData <- trainDataRaw[,which(!(sapply(trainDataRaw,function(x) any(is.na(x)))))]
+testData <- testDataRaw[,which(!(sapply(testDataRaw,function(x) any(is.na(x)))))]
+
+#further reduce the number of columns to only those that do not end in x,y, or z
+trainData <- trainData[,which(!grepl(pattern="(x|y|z)$",x=names(trainData),perl=TRUE))]
+testData <- testData[,which(!grepl(pattern="(x|y|z)$",x=names(testData),perl=TRUE))]
+
+#first few columns are not necessary
+trainData <- trainData[,-c(1:7)]
+testData <- testData[,-c(1:7)]
+
+names(trainData)
+```
+
+####Alternate method to remove columns with NAs
+``` {r eval=FALSE,warning=FALSE,message=FALSE}
+#if the total count of NAs in each column is 0 than there are no NAs and we keep the column
+trainData2 <- trainDataRaw[,colSums(is.na(trainDataRaw)) == 0]
+testData2 <- testDataRaw[,colSums(is.na(testDataRaw)) == 0]
+```
+
+##Split the training data into subTrainTesting subTrainTesting
+``` {r warning=FALSE,message=FALSE}
+#split the training data by a 70/30 ratio
+inTrain <- createDataPartition(y=trainData$classe,p=0.7,list=FALSE)
+subTrainTraining <- trainData[inTrain,]
+subTrainTesting <- trainData[-inTrain,]
+```
+
+#Training the models on the Training Set
+``` {r warning=FALSE,message=FALSE}
+mod_treebag <- train(classe ~.,method="treebag",data=subTrainTraining)
+mod_gbm <- train(classe ~.,method="gbm",data=subTrainTraining,verbose=FALSE)
+mod_rf <- train(classe ~.,method="rf",data=subTrainTraining)
+```
+
+#Predicting on the Training Test Set
+``` {r warning=FALSE,message=FALSE}
+predict_treebag <- predict(mod_treebag,subTrainTesting)
+predict_gbm <- predict(mod_gbm,subTrainTesting)
+predict_rf <- predict(mod_rf,subTrainTesting)
+```
+
+#ConfusionMatrices for each model
+From the 3 prediction vs. outcome matricies below, there is little difference between the 3 and all have high accuracy and low error rates.
+``` {r warning=FALSE,message=FALSE}
+conf_treebag <- confusionMatrix(subTrainTesting$classe,predict_treebag)
+conf_gbm <- confusionMatrix(subTrainTesting$classe,predict_gbm)
+conf_rf <- confusionMatrix(subTrainTesting$classe,predict_rf)
+
+conf_treebag$table; conf_gbm$table; conf_rf$table
+```
+
+#Sample Error Rate(s)
+The expected error rates are very low, below 0.07, with an accuracy of above 93%.  Based in the training data and the models chosen the accuracy was always very high.  The below represents sample error rates observed:
+
+- Treebag Model - (1 - Accuracy) = 0.048
+- GBM Model - (1 - Accuracy) = 0.017
+- Random Forest Model - "In random forests, there is no need for cross-validation or a separate test set to get an unbiased estimate of the test set error." - http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#ooberr
+
+#Predict testData outcomes
+``` {r warning=FALSE,message=FALSE}
+#Real prediction based on each model
+r_predict_treebag <- predict(mod_treebag,testData)
+r_predict_gbm <- predict(mod_gbm,testData)
+r_predict_rf <- predict(mod_rf,testData)
+
+#count of predicted values, little difference betweeen the 3
+compare_count <- table(r_predict_treebag)
+compare_count <- rbind(compare_count,table(r_predict_gbm))
+compare_count <- rbind(compare_count,table(r_predict_rf))
+rownames(compare_count) <- c("treebag_count","gbm_count","rf_count")
+compare_count
+```
+
+#Conclusion
+Any of the models described above should be sufficient for predicting the testData outcomes and the "quality" of a weight lifters excercises. 
